@@ -321,41 +321,75 @@ Examples:
                                 print(f"Suggestion also failed: {suggest_err}")
                                 page = None
                     
-                    # If exact match failed or not found, try other results with smart prioritization
+                    # If exact match failed or not found, use AI-powered result selection
                     if not page:
-                        # Smart prioritization: look for the main entity (band/person) vs sub-topics
-                        main_entity_results = []
-                        sub_topic_results = []
+                        print("Using AI-powered result ranking...")
                         
+                        # AI-powered scoring system for Wikipedia results
+                        def score_result(result, search_term):
+                            score = 0
+                            result_lower = result.lower()
+                            search_lower = search_term.lower()
+                            
+                            # Base score: exact match gets highest priority
+                            if result_lower == search_lower:
+                                score += 100
+                            elif search_lower in result_lower:
+                                score += 50
+                            
+                            # Penalty for sub-topics (the more specific, the lower the score)
+                            sub_topic_penalties = {
+                                'discography': -40, 'filmography': -40, 'bibliography': -40,
+                                'album': -30, 'song': -30, 'single': -30,
+                                'tour': -25, 'live': -25, 'concert': -25,
+                                'awards': -20, 'controversy': -20, 'scandal': -20,
+                                'compilation': -15, 'greatest hits': -15
+                            }
+                            
+                            for keyword, penalty in sub_topic_penalties.items():
+                                if keyword in result_lower:
+                                    score += penalty
+                            
+                            # Penalty for separators indicating sub-topics
+                            separators = [' – ', ' - ', ': ', ' (album)', ' (song)', ' (film)', ' (band)', ' (musician)']
+                            for sep in separators:
+                                if sep in result:
+                                    if '(band)' in result or '(musician)' in result:
+                                        score += 10  # Actually prefer these for artists
+                                    else:
+                                        score -= 15
+                            
+                            # Bonus for shorter titles (usually main topics)
+                            if len(result) < 20:
+                                score += 10
+                            elif len(result) > 40:
+                                score -= 5
+                            
+                            # Bonus for results that are likely main entity pages
+                            main_indicators = ['band', 'musician', 'artist', 'singer', 'group']
+                            if any(indicator in result_lower for indicator in main_indicators):
+                                score += 15
+                            
+                            return score
+                        
+                        # Score and sort all results
+                        scored_results = []
                         for result in search_results:
                             if result == exact_match:  # Skip exact match as we already tried it
                                 continue
-                            
-                            result_lower = result.lower()
-                            title_lower = title.lower()
-                            
-                            # Check if this looks like the main entity we're searching for
-                            # Priority 1: Results that contain the search term but are likely the main page
-                            if (title_lower in result_lower and 
-                                not any(keyword in result_lower for keyword in 
-                                       ['discography', 'album', 'song', 'tour', 'live', 'compilation', 
-                                        'filmography', 'bibliography', 'awards', 'controversy'])):
-                                # Further check: avoid results that are clearly sub-topics
-                                if not any(separator in result for separator in [' – ', ' - ', ': ', ' (album)', ' (song)', ' (film)']):
-                                    main_entity_results.append(result)
-                                else:
-                                    sub_topic_results.append(result)
-                            else:
-                                sub_topic_results.append(result)
+                            score = score_result(result, title)
+                            scored_results.append((score, result))
+                            print(f"'{result}' scored: {score}")
                         
-                        print(f"Main entity candidates: {main_entity_results}")
-                        print(f"Sub-topic candidates: {sub_topic_results}")
+                        # Sort by score (highest first)
+                        scored_results.sort(key=lambda x: x[0], reverse=True)
+                        print(f"AI ranking: {[f'{result} ({score})' for score, result in scored_results]}")
                         
-                        # Try main entity results first, then sub-topics
-                        for result in main_entity_results + sub_topic_results:
+                        # Try results in AI-ranked order
+                        for score, result in scored_results:
                             try:
                                 page = wikipedia.page(result, auto_suggest=True)
-                                print(f"Success with search result '{result}': {page.title}")
+                                print(f"Success with AI-ranked result '{result}' (score: {score}): {page.title}")
                                 break
                             except Exception as search_err:
                                 print(f"Failed with '{result}': {search_err}")
