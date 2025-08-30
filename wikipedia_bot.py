@@ -163,14 +163,21 @@ Examples:
             content = page.content
             sections = self.extract_main_sections(content)
             
-            # Build longer summary
-            detailed_summary = f"📖 **{page.title}** - Detailed Summary\n\n"
-            detailed_summary += f"📋 **Overview:**\n{long_summary}\n\n"
+            # Format the longer summary
+            formatted_long_summary = self.format_summary_text(long_summary)
+            
+            # Build longer summary with enhanced formatting
+            detailed_summary = f"""📚 **{page.title}** - *Detailed Summary*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 **Comprehensive Overview:**
+{formatted_long_summary}
+"""
             
             if sections:
-                detailed_summary += f"🔍 **Main Topics:**\n{sections}\n\n"
+                detailed_summary += f"\n\n📑 **Article Structure:**\n{sections}"
             
-            detailed_summary += f"🔗 **Full Article:** [Wikipedia]({page.url})"
+            detailed_summary += f"\n\n🔗 **Complete Article:** [Read on Wikipedia]({page.url})"
             
             # Split if too long
             chunks = self.split_text(detailed_summary, max_length=3500)
@@ -210,7 +217,7 @@ Examples:
             page = wikipedia.page(title)
             
             # Create enhanced summary
-            summary_text = await self.create_enhanced_summary(page)
+            summary_text, image_url = await self.create_enhanced_summary(page)
             
             # Create inline keyboard for more options
             keyboard = [
@@ -218,6 +225,13 @@ Examples:
                 [InlineKeyboardButton("📝 Longer Summary", callback_data=f"long_{title}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Send featured image first if available
+            if image_url:
+                try:
+                    await message.reply_photo(photo=image_url, caption=f"🖼️ *Featured image for {page.title}*", parse_mode='Markdown')
+                except Exception:
+                    pass  # Continue without image if it fails
             
             # Send the enhanced summary
             await message.reply_text(summary_text, parse_mode='Markdown', reply_markup=reply_markup)
@@ -234,27 +248,38 @@ Examples:
             title = page.title
             url = page.url
             
+            # Get featured image if available
+            image_url = self.get_featured_image(page)
+            
             # Get a longer summary (5-7 sentences for better context)
             summary = wikipedia.summary(page.title, sentences=6)
+            
+            # Format the summary with better text styling
+            formatted_summary = self.format_summary_text(summary)
             
             # Extract key sections from the article for additional context
             content = page.content
             key_info = self.extract_key_information(content)
             
-            # Build the enhanced summary
-            enhanced_summary = f"📖 **{title}**\n\n"
-            enhanced_summary += f"📋 **Summary:**\n{summary}\n\n"
+            # Build the enhanced summary with rich formatting
+            enhanced_summary = f"""🌟 **{title}**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 **Overview:**
+{formatted_summary}
+"""
             
             if key_info:
-                enhanced_summary += f"🔍 **Key Information:**\n{key_info}\n\n"
+                enhanced_summary += f"\n\n💡 **Key Highlights:**\n{key_info}"
             
-            enhanced_summary += f"🔗 **Read more:** [Wikipedia Article]({url})"
+            enhanced_summary += f"\n\n🔗 **Full Article:** [Read on Wikipedia]({url})"
             
-            return enhanced_summary
+            return enhanced_summary, image_url
             
         except Exception as e:
             # Fallback to basic summary if enhanced fails
-            return f"📖 **{page.title}**\n\n{wikipedia.summary(page.title, sentences=3)}\n\n🔗 [Read more]({page.url})"
+            basic_summary = wikipedia.summary(page.title, sentences=3)
+            return f"📖 **{page.title}**\n\n{basic_summary}\n\n🔗 [Read more]({page.url})", None
     
     def extract_key_information(self, content):
         """Extract key bullet points from article content."""
@@ -290,6 +315,77 @@ Examples:
                     break
         
         return '\n'.join(key_points) if key_points else None
+    
+    def get_featured_image(self, page):
+        """Extract featured image URL from Wikipedia page."""
+        try:
+            # Get page images
+            images = page.images
+            
+            if not images:
+                return None
+            
+            # Look for the main/featured image (usually the first one)
+            # Filter out common non-content images
+            excluded_patterns = [
+                'commons-logo', 'wikimedia', 'edit-icon', 'wiki.png',
+                'ambox', 'crystal', 'folder', 'nuvola', 'question_book'
+            ]
+            
+            for image_url in images[:5]:  # Check first 5 images
+                image_lower = image_url.lower()
+                
+                # Skip excluded patterns
+                if any(pattern in image_lower for pattern in excluded_patterns):
+                    continue
+                
+                # Prefer JPG, PNG, WebP images
+                if any(ext in image_lower for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+                    return image_url
+            
+            # Return first image if no preferred format found
+            return images[0] if images else None
+            
+        except Exception:
+            return None
+    
+    def format_summary_text(self, summary):
+        """Add formatting to make summary text more readable."""
+        import re
+        
+        # Split into sentences
+        sentences = summary.split('. ')
+        
+        if not sentences:
+            return summary
+        
+        formatted_sentences = []
+        
+        for i, sentence in enumerate(sentences):
+            sentence = sentence.strip()
+            
+            if not sentence:
+                continue
+            
+            # Add period back if not last sentence
+            if i < len(sentences) - 1 and not sentence.endswith('.'):
+                sentence += '.'
+            
+            # Bold important terms (years, numbers, proper nouns)
+            # Bold years (4 digits)
+            sentence = re.sub(r'\b(\d{4})\b', r'**\1**', sentence)
+            
+            # Bold percentages and large numbers
+            sentence = re.sub(r'\b(\d+(?:,\d+)*(?:\.\d+)?%)\b', r'**\1**', sentence)
+            sentence = re.sub(r'\b(\d+(?:,\d+)+)\b', r'**\1**', sentence)
+            
+            formatted_sentences.append(sentence)
+        
+        # Join with proper spacing and add emphasis to first sentence
+        if formatted_sentences:
+            formatted_sentences[0] = f"*{formatted_sentences[0]}*"
+        
+        return ' '.join(formatted_sentences)
 
     def clean_article_text(self, text):
         """Clean up Wikipedia article text."""
