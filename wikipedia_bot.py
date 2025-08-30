@@ -102,7 +102,7 @@ Examples:
             if len(search_results) > 1:
                 keyboard = []
                 for i, result in enumerate(search_results[:5]):
-                    keyboard.append([InlineKeyboardButton(result, callback_data=f"wiki_{i}_{result}")])
+                    keyboard.append([InlineKeyboardButton(result, callback_data=f"wiki_{result}")])
                 
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 context.user_data['search_results'] = search_results
@@ -122,7 +122,7 @@ Examples:
             options = e.options[:5]  # Show first 5 options
             
             for i, option in enumerate(options):
-                keyboard.append([InlineKeyboardButton(option, callback_data=f"wiki_{i}_{option}")])
+                keyboard.append([InlineKeyboardButton(option, callback_data=f"wiki_{option}")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             context.user_data['search_results'] = options
@@ -141,9 +141,8 @@ Examples:
         await query.answer()
         
         try:
-            data_parts = query.data.split('_', 2)
-            if len(data_parts) >= 3 and data_parts[0] == 'wiki':
-                article_title = data_parts[2]
+            if query.data.startswith('wiki_'):
+                article_title = query.data[5:]  # Remove 'wiki_' prefix
                 await self.get_article(query.message, article_title)
                 
         except Exception as e:
