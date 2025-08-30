@@ -199,10 +199,12 @@ Examples:
                 else:
                     await message.reply_text(f"*(Continued...)*\n\n{chunk}", parse_mode='Markdown')
                     
-        except wikipedia.exceptions.PageError:
+        except wikipedia.exceptions.PageError as e:
+            print(f"PageError in longer summary for '{title}': {e}")
             await self.handle_page_not_found(message, title)
         except Exception as e:
-            await message.reply_text(f"❌ **Sorry, couldn't load the detailed summary**\n\nTry the main summary or search for a different topic.")
+            print(f"Error in longer summary for '{title}': {e}")
+            await message.reply_text(f"❌ **Sorry, couldn't load the detailed summary**\n\nError: {str(e)[:100]}...\n\nTry the main summary or search for a different topic.")
     
     def extract_main_sections(self, content):
         """Extract main section headers and brief descriptions."""
@@ -226,13 +228,16 @@ Examples:
     async def handle_page_not_found(self, message, title):
         """Handle page not found errors with better UX and suggestions."""
         try:
-            # Try to find similar articles
-            search_results = wikipedia.search(title, results=5)
+            # Try to find similar articles, but exclude the exact same title to avoid loops
+            search_results = wikipedia.search(title, results=8)
             
-            if search_results:
-                # Show alternative suggestions
+            # Filter out the exact same title that failed
+            filtered_results = [result for result in search_results if result.lower() != title.lower()]
+            
+            if filtered_results:
+                # Show alternative suggestions (exclude the failed title)
                 keyboard = []
-                for result in search_results[:3]:  # Show top 3 suggestions
+                for result in filtered_results[:3]:  # Show top 3 different suggestions
                     import urllib.parse
                     encoded_result = urllib.parse.quote(result)
                     keyboard.append([InlineKeyboardButton(result, callback_data=f"wiki_{encoded_result}")])
@@ -241,12 +246,12 @@ Examples:
                 
                 await message.reply_text(
                     f"🤔 **Couldn't find '{title}'**\n\n"
-                    f"💡 **Did you mean one of these?**",
+                    f"💡 **Did you mean one of these instead?**",
                     reply_markup=reply_markup,
                     parse_mode='Markdown'
                 )
             else:
-                # No suggestions available
+                # No different suggestions available
                 await message.reply_text(
                     f"🤔 **Couldn't find '{title}'**\n\n"
                     f"💡 **Try:**\n"
@@ -267,8 +272,36 @@ Examples:
     async def get_article(self, message, title):
         """Fetch and send Wikipedia article summary."""
         try:
-            # Get the article page
-            page = wikipedia.page(title)
+            # Debug: Print what we're trying to load
+            print(f"Attempting to load page: '{title}'")
+            
+            # Try different approaches to get the page
+            page = None
+            
+            # First try: Direct page access
+            try:
+                page = wikipedia.page(title)
+                print(f"Success with direct access: {page.title}")
+            except wikipedia.exceptions.DisambiguationError as e:
+                # If disambiguation, try the first option
+                print(f"Disambiguation found, trying first option: {e.options[0]}")
+                page = wikipedia.page(e.options[0])
+            except wikipedia.exceptions.PageError:
+                # If direct access fails, try with auto_suggest
+                print(f"Direct access failed, trying with auto_suggest")
+                try:
+                    page = wikipedia.page(title, auto_suggest=True)
+                    print(f"Success with auto_suggest: {page.title}")
+                except:
+                    # Last resort: search and get first result
+                    print(f"Auto_suggest failed, trying search approach")
+                    search_results = wikipedia.search(title, results=1)
+                    if search_results:
+                        page = wikipedia.page(search_results[0])
+                        print(f"Success with search approach: {page.title}")
+            
+            if not page:
+                raise wikipedia.exceptions.PageError(f"Could not find page for '{title}'")
             
             # Create enhanced summary
             summary_text, image_url = await self.create_enhanced_summary(page)
@@ -293,11 +326,13 @@ Examples:
             # Send the enhanced summary
             await message.reply_text(summary_text, parse_mode='Markdown', reply_markup=reply_markup)
                 
-        except wikipedia.exceptions.PageError:
+        except wikipedia.exceptions.PageError as e:
+            print(f"PageError for '{title}': {e}")
             # Handle page not found with better UX
             await self.handle_page_not_found(message, title)
         except Exception as e:
-            await message.reply_text(f"❌ **Sorry, something went wrong**\n\nTry searching for a different topic or be more specific with your search.")
+            print(f"Unexpected error for '{title}': {e}")
+            await message.reply_text(f"❌ **Sorry, something went wrong**\n\nError: {str(e)[:100]}...\n\nTry searching for a different topic.")
     
     async def create_enhanced_summary(self, page):
         """Create an enhanced, informative summary of the Wikipedia article."""
