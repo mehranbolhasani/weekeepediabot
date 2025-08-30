@@ -75,76 +75,80 @@ class WikipediaBot:
     async def get_wikipedia_page_direct(self, title):
         """Direct Wikipedia API call to bypass library issues"""
         try:
-            # Step 1: Search for the page
-            search_url = "https://en.wikipedia.org/api/rest_v1/page/search"
+            # Step 1: Search for the page using opensearch API (more reliable)
+            search_url = "https://en.wikipedia.org/w/api.php"
             search_params = {
-                'q': title,
-                'limit': 10
+                'action': 'opensearch',
+                'search': title,
+                'limit': 10,
+                'format': 'json'
             }
             
             print(f"🔍 Direct API search for: '{title}'")
             search_response = requests.get(search_url, params=search_params, timeout=10)
             search_data = search_response.json()
             
-            if not search_data.get('pages'):
+            if len(search_data) < 2 or not search_data[1]:
                 return None
                 
             # Step 2: Smart page selection
-            pages = search_data['pages']
-            print(f"📋 Direct API found pages: {[p['title'] for p in pages]}")
+            page_titles = search_data[1]
+            print(f"📋 Direct API found pages: {page_titles}")
             
             # AI-powered page selection
-            def score_page(page, search_term):
-                page_title = page['title'].lower()
+            def score_page_title(page_title, search_term):
+                title_lower = page_title.lower()
                 search_lower = search_term.lower()
                 score = 0
                 
                 # Exact match gets highest priority
-                if page_title == search_lower:
+                if title_lower == search_lower:
                     score += 100
-                elif search_lower in page_title:
+                elif search_lower in title_lower:
                     score += 50
                 
-                # Penalty for sub-topics
+                # Heavy penalties for sub-topics
                 penalties = {
-                    'discography': -40, 'album': -30, 'song': -30,
-                    'tour': -25, 'live': -25, 'compilation': -20
+                    'album': -60, 'song': -60, 'single': -60,
+                    'discography': -70, 'tour': -50, 'live': -50,
+                    'compilation': -40, 'greatest hits': -40
                 }
                 
                 for keyword, penalty in penalties.items():
-                    if keyword in page_title:
+                    if keyword in title_lower:
                         score += penalty
                 
                 # Penalty for separators indicating sub-topics
-                if any(sep in page['title'] for sep in [' – ', ' - ', ': ']):
-                    if '(band)' in page['title'] or '(musician)' in page['title']:
-                        score += 10  # Actually prefer these for artists
+                if any(sep in page_title for sep in [' – ', ' - ', ': ', '(album)', '(song)']):
+                    if '(band)' in page_title or '(musician)' in page_title:
+                        score += 20  # Actually prefer these for artists
                     else:
-                        score -= 15
+                        score -= 30
                 
                 # Bonus for shorter titles (main topics)
-                if len(page['title']) < 20:
-                    score += 10
+                if len(page_title) < 15:
+                    score += 15
+                elif len(page_title) > 30:
+                    score -= 10
                 
                 return score
             
             # Score and select best page
-            scored_pages = [(score_page(p, title), p) for p in pages]
+            scored_pages = [(score_page_title(title, title), title) for title in page_titles]
             scored_pages.sort(key=lambda x: x[0], reverse=True)
             
-            print(f"🤖 AI scoring: {[(p['title'], score) for score, p in scored_pages[:3]]}")
+            print(f"🤖 AI scoring: {[(title, score) for score, title in scored_pages[:3]]}")
             
-            best_page = scored_pages[0][1]
-            page_title = best_page['title']
-            print(f"✅ Selected page: '{page_title}'")
+            best_page_title = scored_pages[0][1]
+            print(f"✅ Selected page: '{best_page_title}'")
             
             # Step 3: Get page content
-            content_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(page_title)}"
+            content_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(best_page_title)}"
             content_response = requests.get(content_url, timeout=10)
             content_data = content_response.json()
             
             return {
-                'title': content_data.get('title', page_title),
+                'title': content_data.get('title', best_page_title),
                 'summary': content_data.get('extract', ''),
                 'url': content_data.get('content_urls', {}).get('desktop', {}).get('page', ''),
                 'image': content_data.get('thumbnail', {}).get('source', '') if content_data.get('thumbnail') else ''
@@ -166,7 +170,7 @@ class WikipediaBot:
                 await self.send_direct_summary(message, direct_result)
                 return
             
-            # Fallback to original library method
+            # Fallback to original library method with smart prioritization
             page = None
             try:
                 page = wikipedia.page(title, auto_suggest=True)
@@ -177,13 +181,58 @@ class WikipediaBot:
             except wikipedia.exceptions.PageError:
                 print(f"❌ Library failed, trying search approach")
                 try:
-                    search_results = wikipedia.search(title, results=5)
+                    search_results = wikipedia.search(title, results=8)
                     print(f"🔍 Search found: {search_results}")
                     
-                    for result in search_results:
+                    # Apply AI scoring to library search results
+                    def score_library_result(result, search_term):
+                        result_lower = result.lower()
+                        search_lower = search_term.lower()
+                        score = 0
+                        
+                        # Exact match gets highest priority
+                        if result_lower == search_lower:
+                            score += 100
+                        elif search_lower in result_lower:
+                            score += 50
+                        
+                        # Heavy penalties for sub-topics
+                        penalties = {
+                            'album': -50, 'song': -50, 'single': -50,
+                            'discography': -60, 'tour': -40, 'live': -40,
+                            'compilation': -30, 'greatest hits': -30
+                        }
+                        
+                        for keyword, penalty in penalties.items():
+                            if keyword in result_lower:
+                                score += penalty
+                        
+                        # Penalty for parentheses (usually indicates sub-topics)
+                        if '(' in result and ')' in result:
+                            if '(band)' in result_lower or '(musician)' in result_lower:
+                                score += 20  # Actually prefer these for artists
+                            else:
+                                score -= 25
+                        
+                        # Bonus for shorter titles (main topics)
+                        if len(result) < 15:
+                            score += 15
+                        elif len(result) > 30:
+                            score -= 10
+                        
+                        return score
+                    
+                    # Score and sort results
+                    scored_results = [(score_library_result(r, title), r) for r in search_results]
+                    scored_results.sort(key=lambda x: x[0], reverse=True)
+                    
+                    print(f"🤖 Library AI scoring: {[(r, score) for score, r in scored_results[:3]]}")
+                    
+                    # Try results in scored order
+                    for score, result in scored_results:
                         try:
                             page = wikipedia.page(result, auto_suggest=True)
-                            print(f"✅ Search success: {page.title}")
+                            print(f"✅ Search success: {result} (score: {score}) -> {page.title}")
                             break
                         except Exception:
                             continue
