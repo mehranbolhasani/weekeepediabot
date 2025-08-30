@@ -278,20 +278,30 @@ Examples:
             # Try different approaches to get the page
             page = None
             
-            # First try: Direct page access with exact title
+            # First try: Direct page access with auto_suggest enabled (this is key!)
             try:
-                page = wikipedia.page(title, auto_suggest=False)
+                page = wikipedia.page(title, auto_suggest=True)
                 print(f"Success with direct access: {page.title}")
             except wikipedia.exceptions.DisambiguationError as e:
                 # If disambiguation, try the first option
                 print(f"Disambiguation found, trying first option: {e.options[0]}")
                 page = wikipedia.page(e.options[0])
             except wikipedia.exceptions.PageError:
-                # If direct access fails, try with auto_suggest enabled
-                print(f"Direct access failed, trying with auto_suggest")
+                # If direct access fails, try search-based approach
+                print(f"Direct access failed, trying search-based approach")
                 try:
-                    page = wikipedia.page(title, auto_suggest=True)
-                    print(f"Success with auto_suggest: {page.title}")
+                    # Get search results and try each one
+                    search_results = wikipedia.search(title, results=5)
+                    print(f"Search found: {search_results}")
+                    
+                    for result in search_results:
+                        try:
+                            page = wikipedia.page(result, auto_suggest=True)
+                            print(f"Success with search result '{result}': {page.title}")
+                            break
+                        except Exception as search_err:
+                            print(f"Failed with '{result}': {search_err}")
+                            continue
                 except wikipedia.exceptions.PageError:
                     # Try with title case variations
                     print(f"Auto_suggest failed, trying title variations")
