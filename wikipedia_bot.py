@@ -278,27 +278,50 @@ Examples:
             # Try different approaches to get the page
             page = None
             
-            # First try: Direct page access
+            # First try: Direct page access with exact title
             try:
-                page = wikipedia.page(title)
+                page = wikipedia.page(title, auto_suggest=False)
                 print(f"Success with direct access: {page.title}")
             except wikipedia.exceptions.DisambiguationError as e:
                 # If disambiguation, try the first option
                 print(f"Disambiguation found, trying first option: {e.options[0]}")
                 page = wikipedia.page(e.options[0])
             except wikipedia.exceptions.PageError:
-                # If direct access fails, try with auto_suggest
+                # If direct access fails, try with auto_suggest enabled
                 print(f"Direct access failed, trying with auto_suggest")
                 try:
                     page = wikipedia.page(title, auto_suggest=True)
                     print(f"Success with auto_suggest: {page.title}")
-                except:
-                    # Last resort: search and get first result
-                    print(f"Auto_suggest failed, trying search approach")
-                    search_results = wikipedia.search(title, results=1)
-                    if search_results:
-                        page = wikipedia.page(search_results[0])
-                        print(f"Success with search approach: {page.title}")
+                except wikipedia.exceptions.PageError:
+                    # Try with title case variations
+                    print(f"Auto_suggest failed, trying title variations")
+                    title_variations = [
+                        title.title(),  # Title Case
+                        title.lower(),  # lowercase
+                        title.upper(),  # UPPERCASE
+                        title.replace(' ', '_')  # underscores
+                    ]
+                    
+                    for variation in title_variations:
+                        try:
+                            page = wikipedia.page(variation, auto_suggest=True)
+                            print(f"Success with variation '{variation}': {page.title}")
+                            break
+                        except:
+                            continue
+                    
+                    if not page:
+                        # Last resort: search and get first result
+                        print(f"All variations failed, trying search approach")
+                        search_results = wikipedia.search(title, results=3)
+                        if search_results:
+                            for result in search_results:
+                                try:
+                                    page = wikipedia.page(result)
+                                    print(f"Success with search result '{result}': {page.title}")
+                                    break
+                                except:
+                                    continue
             
             if not page:
                 raise wikipedia.exceptions.PageError(f"Could not find page for '{title}'")
