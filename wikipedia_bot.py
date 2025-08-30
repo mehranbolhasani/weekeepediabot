@@ -166,18 +166,17 @@ Examples:
             # Format the longer summary
             formatted_long_summary = self.format_summary_text(long_summary)
             
-            # Build longer summary with enhanced formatting
-            detailed_summary = f"""📚 **{page.title}** - *Detailed Summary*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # Build longer summary with clean emoji structure
+            detailed_summary = f"""# 📚 {page.title} - Detailed Summary
 
-📖 **Comprehensive Overview:**
+## 📖 Comprehensive Overview
 {formatted_long_summary}
 """
             
             if sections:
-                detailed_summary += f"\n\n📑 **Article Structure:**\n{sections}"
+                detailed_summary += f"\n\n## 📑 Article Structure\n{sections}"
             
-            detailed_summary += f"\n\n🔗 **Complete Article:** [Read on Wikipedia]({page.url})"
+            detailed_summary += f"\n\n## 🔗 Complete Article\n[Read on Wikipedia]({page.url})"
             
             # Split if too long
             chunks = self.split_text(detailed_summary, max_length=3500)
@@ -261,18 +260,17 @@ Examples:
             content = page.content
             key_info = self.extract_key_information(content)
             
-            # Build the enhanced summary with rich formatting
-            enhanced_summary = f"""🌟 **{title}**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # Build the enhanced summary with emoji structure
+            enhanced_summary = f"""# 📖 {title}
 
-📝 **Overview:**
+## 📋 Overview
 {formatted_summary}
 """
             
             if key_info:
-                enhanced_summary += f"\n\n💡 **Key Highlights:**\n{key_info}"
+                enhanced_summary += f"\n\n## 💡 Key Highlights\n{key_info}"
             
-            enhanced_summary += f"\n\n🔗 **Full Article:** [Read on Wikipedia]({url})"
+            enhanced_summary += f"\n\n## 🔗 Read More\n[Full Wikipedia Article]({url})"
             
             return enhanced_summary, image_url
             
@@ -317,7 +315,7 @@ Examples:
         return '\n'.join(key_points) if key_points else None
     
     def get_featured_image(self, page):
-        """Extract featured image URL from Wikipedia page."""
+        """Extract the main infobox image from Wikipedia page."""
         try:
             # Get page images
             images = page.images
@@ -325,14 +323,36 @@ Examples:
             if not images:
                 return None
             
-            # Look for the main/featured image (usually the first one)
-            # Filter out common non-content images
+            # Look for the main article image (infobox image)
+            # These are typically the first meaningful image
             excluded_patterns = [
                 'commons-logo', 'wikimedia', 'edit-icon', 'wiki.png',
-                'ambox', 'crystal', 'folder', 'nuvola', 'question_book'
+                'ambox', 'crystal', 'folder', 'nuvola', 'question_book',
+                'magnify-clip', 'speaker', 'audio', 'ogg', 'sound'
             ]
             
-            for image_url in images[:5]:  # Check first 5 images
+            # Prioritize images that are likely to be the main article image
+            priority_patterns = [
+                page.title.lower().replace(' ', '_'),
+                page.title.lower().replace(' ', ''),
+                'infobox', 'portrait', 'logo'
+            ]
+            
+            # First pass: look for priority images
+            for image_url in images[:3]:  # Check first 3 images only
+                image_lower = image_url.lower()
+                
+                # Skip excluded patterns
+                if any(pattern in image_lower for pattern in excluded_patterns):
+                    continue
+                
+                # Check if it's a priority image
+                if any(pattern in image_lower for pattern in priority_patterns):
+                    if any(ext in image_lower for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+                        return image_url
+            
+            # Second pass: get the first clean image
+            for image_url in images[:2]:  # Only check first 2 images
                 image_lower = image_url.lower()
                 
                 # Skip excluded patterns
@@ -343,8 +363,7 @@ Examples:
                 if any(ext in image_lower for ext in ['.jpg', '.jpeg', '.png', '.webp']):
                     return image_url
             
-            # Return first image if no preferred format found
-            return images[0] if images else None
+            return None  # Don't return random images
             
         except Exception:
             return None
