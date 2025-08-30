@@ -98,7 +98,7 @@ Examples:
                 await update.message.reply_text(f"No results found for '{query}'. Try a different search term.")
                 return
             
-            # If multiple results, show options
+            # If multiple results, show options with better messaging
             if len(search_results) > 1:
                 keyboard = []
                 for i, result in enumerate(search_results[:5]):
@@ -111,8 +111,10 @@ Examples:
                 context.user_data['search_results'] = search_results
                 
                 await update.message.reply_text(
-                    f"Found multiple results for '{query}'. Please select one:",
-                    reply_markup=reply_markup
+                    f"🎯 **Found {len(search_results)} results for '{query}'**\n\n"
+                    f"📋 **Which one are you looking for?**",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
                 )
                 return
             
@@ -134,8 +136,10 @@ Examples:
             context.user_data['search_results'] = options
             
             await update.message.reply_text(
-                f"'{query}' is ambiguous. Please select the specific topic:",
-                reply_markup=reply_markup
+                f"🎯 **'{query}' has multiple meanings**\n\n"
+                f"📋 **Which specific topic do you want?**",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
             )
             
         except Exception as e:
@@ -160,7 +164,7 @@ Examples:
                 await self.get_longer_summary(query.message, article_title)
                 
         except Exception as e:
-            await query.message.reply_text(f"Error loading article: {str(e)}")
+            await query.message.reply_text(f"❌ **Oops! Something went wrong**\n\nPlease try searching again or choose a different topic.")
 
     async def get_longer_summary(self, message, title):
         """Send a longer, more detailed summary."""
@@ -195,8 +199,10 @@ Examples:
                 else:
                     await message.reply_text(f"*(Continued...)*\n\n{chunk}", parse_mode='Markdown')
                     
+        except wikipedia.exceptions.PageError:
+            await self.handle_page_not_found(message, title)
         except Exception as e:
-            await message.reply_text(f"Error getting detailed summary: {str(e)}")
+            await message.reply_text(f"❌ **Sorry, couldn't load the detailed summary**\n\nTry the main summary or search for a different topic.")
     
     def extract_main_sections(self, content):
         """Extract main section headers and brief descriptions."""
@@ -216,6 +222,47 @@ Examples:
                 formatted_sections.append(f"• {section}")
         
         return '\n'.join(formatted_sections) if formatted_sections else None
+    
+    async def handle_page_not_found(self, message, title):
+        """Handle page not found errors with better UX and suggestions."""
+        try:
+            # Try to find similar articles
+            search_results = wikipedia.search(title, results=5)
+            
+            if search_results:
+                # Show alternative suggestions
+                keyboard = []
+                for result in search_results[:3]:  # Show top 3 suggestions
+                    import urllib.parse
+                    encoded_result = urllib.parse.quote(result)
+                    keyboard.append([InlineKeyboardButton(result, callback_data=f"wiki_{encoded_result}")])
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await message.reply_text(
+                    f"🤔 **Couldn't find '{title}'**\n\n"
+                    f"💡 **Did you mean one of these?**",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            else:
+                # No suggestions available
+                await message.reply_text(
+                    f"🤔 **Couldn't find '{title}'**\n\n"
+                    f"💡 **Try:**\n"
+                    f"• Being more specific (e.g., 'Einstein physicist')\n"
+                    f"• Using the full name\n"
+                    f"• Checking your spelling\n"
+                    f"• Searching for a related topic",
+                    parse_mode='Markdown'
+                )
+        except Exception:
+            # Fallback if even search fails
+            await message.reply_text(
+                f"🤔 **Couldn't find '{title}'**\n\n"
+                f"💡 **Try searching for something else!**",
+                parse_mode='Markdown'
+            )
 
     async def get_article(self, message, title):
         """Fetch and send Wikipedia article summary."""
@@ -247,9 +294,10 @@ Examples:
             await message.reply_text(summary_text, parse_mode='Markdown', reply_markup=reply_markup)
                 
         except wikipedia.exceptions.PageError:
-            await message.reply_text(f"Page '{title}' not found. Try a different search term.")
+            # Handle page not found with better UX
+            await self.handle_page_not_found(message, title)
         except Exception as e:
-            await message.reply_text(f"Error retrieving article: {str(e)}")
+            await message.reply_text(f"❌ **Sorry, something went wrong**\n\nTry searching for a different topic or be more specific with your search.")
     
     async def create_enhanced_summary(self, page):
         """Create an enhanced, informative summary of the Wikipedia article."""
