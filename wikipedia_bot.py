@@ -102,7 +102,10 @@ Examples:
             if len(search_results) > 1:
                 keyboard = []
                 for i, result in enumerate(search_results[:5]):
-                    keyboard.append([InlineKeyboardButton(result, callback_data=f"wiki_{result}")])
+                    # URL encode the result to handle special characters
+                    import urllib.parse
+                    encoded_result = urllib.parse.quote(result)
+                    keyboard.append([InlineKeyboardButton(result, callback_data=f"wiki_{encoded_result}")])
                 
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 context.user_data['search_results'] = search_results
@@ -122,7 +125,10 @@ Examples:
             options = e.options[:5]  # Show first 5 options
             
             for i, option in enumerate(options):
-                keyboard.append([InlineKeyboardButton(option, callback_data=f"wiki_{option}")])
+                # URL encode the option to handle special characters
+                import urllib.parse
+                encoded_option = urllib.parse.quote(option)
+                keyboard.append([InlineKeyboardButton(option, callback_data=f"wiki_{encoded_option}")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             context.user_data['search_results'] = options
@@ -143,9 +149,14 @@ Examples:
         try:
             if query.data.startswith('wiki_'):
                 article_title = query.data[5:]  # Remove 'wiki_' prefix
+                # URL decode the title to handle special characters
+                import urllib.parse
+                article_title = urllib.parse.unquote(article_title)
                 await self.get_article(query.message, article_title)
             elif query.data.startswith('long_'):
                 article_title = query.data[5:]  # Remove 'long_' prefix
+                import urllib.parse
+                article_title = urllib.parse.unquote(article_title)
                 await self.get_longer_summary(query.message, article_title)
                 
         except Exception as e:
@@ -166,17 +177,14 @@ Examples:
             # Format the longer summary
             formatted_long_summary = self.format_summary_text(long_summary)
             
-            # Build longer summary with clean emoji structure
-            detailed_summary = f"""# 📚 {page.title} - Detailed Summary
-
-## 📖 Comprehensive Overview
-{formatted_long_summary}
-"""
+            # Build longer summary with proper markdown formatting
+            detailed_summary = f"📚 **{page.title} - Detailed Summary**\n\n"
+            detailed_summary += f"📖 **Comprehensive Overview:**\n{formatted_long_summary}\n\n"
             
             if sections:
-                detailed_summary += f"\n\n## 📑 Article Structure\n{sections}"
+                detailed_summary += f"📑 **Article Structure:**\n{sections}\n\n"
             
-            detailed_summary += f"\n\n## 🔗 Complete Article\n[Read on Wikipedia]({page.url})"
+            detailed_summary += f"🔗 **Complete Article:**\n[Read on Wikipedia]({page.url})"
             
             # Split if too long
             chunks = self.split_text(detailed_summary, max_length=3500)
@@ -219,17 +227,20 @@ Examples:
             summary_text, image_url = await self.create_enhanced_summary(page)
             
             # Create inline keyboard for more options
+            import urllib.parse
             keyboard = [
                 [InlineKeyboardButton("📖 Read Full Article", url=page.url)],
-                [InlineKeyboardButton("📝 Longer Summary", callback_data=f"long_{title}")]
+                [InlineKeyboardButton("📝 Longer Summary", callback_data=f"long_{urllib.parse.quote(title)}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             # Send featured image first if available
             if image_url:
                 try:
-                    await message.reply_photo(photo=image_url, caption=f"🖼️ *Featured image for {page.title}*", parse_mode='Markdown')
-                except Exception:
+                    await message.reply_photo(photo=image_url, caption=f"🖼️ Featured image for {page.title}")
+                except Exception as e:
+                    # Log the error for debugging
+                    print(f"Image failed to load: {e}")
                     pass  # Continue without image if it fails
             
             # Send the enhanced summary
@@ -260,17 +271,14 @@ Examples:
             content = page.content
             key_info = self.extract_key_information(content)
             
-            # Build the enhanced summary with emoji structure
-            enhanced_summary = f"""# 📖 {title}
-
-## 📋 Overview
-{formatted_summary}
-"""
+            # Build the enhanced summary with proper markdown formatting
+            enhanced_summary = f"📖 **{title}**\n\n"
+            enhanced_summary += f"📋 **Overview:**\n{formatted_summary}\n\n"
             
             if key_info:
-                enhanced_summary += f"\n\n## 💡 Key Highlights\n{key_info}"
+                enhanced_summary += f"💡 **Key Highlights:**\n{key_info}\n\n"
             
-            enhanced_summary += f"\n\n## 🔗 Read More\n[Full Wikipedia Article]({url})"
+            enhanced_summary += f"🔗 **Read More:**\n[Full Wikipedia Article]({url})"
             
             return enhanced_summary, image_url
             
@@ -331,14 +339,7 @@ Examples:
                 'magnify-clip', 'speaker', 'audio', 'ogg', 'sound'
             ]
             
-            # Prioritize images that are likely to be the main article image
-            priority_patterns = [
-                page.title.lower().replace(' ', '_'),
-                page.title.lower().replace(' ', ''),
-                'infobox', 'portrait', 'logo'
-            ]
-            
-            # First pass: look for priority images
+            # Simply return the first valid image (usually the main one)
             for image_url in images[:3]:  # Check first 3 images only
                 image_lower = image_url.lower()
                 
@@ -346,20 +347,7 @@ Examples:
                 if any(pattern in image_lower for pattern in excluded_patterns):
                     continue
                 
-                # Check if it's a priority image
-                if any(pattern in image_lower for pattern in priority_patterns):
-                    if any(ext in image_lower for ext in ['.jpg', '.jpeg', '.png', '.webp']):
-                        return image_url
-            
-            # Second pass: get the first clean image
-            for image_url in images[:2]:  # Only check first 2 images
-                image_lower = image_url.lower()
-                
-                # Skip excluded patterns
-                if any(pattern in image_lower for pattern in excluded_patterns):
-                    continue
-                
-                # Prefer JPG, PNG, WebP images
+                # Return first valid image format
                 if any(ext in image_lower for ext in ['.jpg', '.jpeg', '.png', '.webp']):
                     return image_url
             
