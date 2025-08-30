@@ -308,7 +308,18 @@ Examples:
                             print(f"Success with exact match '{exact_match}': {page.title}")
                         except Exception as exact_err:
                             print(f"Exact match failed '{exact_match}': {exact_err}")
-                            page = None
+                            # Try using Wikipedia's suggest feature to find the correct title
+                            try:
+                                suggested_title = wikipedia.suggest(title)
+                                if suggested_title and suggested_title != exact_match:
+                                    print(f"Wikipedia suggests: '{suggested_title}'")
+                                    page = wikipedia.page(suggested_title, auto_suggest=True)
+                                    print(f"Success with suggested title '{suggested_title}': {page.title}")
+                                else:
+                                    page = None
+                            except Exception as suggest_err:
+                                print(f"Suggestion also failed: {suggest_err}")
+                                page = None
                     
                     # If exact match failed or not found, try other results with smart prioritization
                     if not page:
