@@ -310,11 +310,23 @@ Examples:
                             print(f"Exact match failed '{exact_match}': {exact_err}")
                             page = None
                     
-                    # If exact match failed or not found, try other results
+                    # If exact match failed or not found, try other results but prioritize main topics
                     if not page:
+                        # Sort results to prioritize main topics over sub-topics
+                        prioritized_results = []
+                        other_results = []
+                        
                         for result in search_results:
                             if result == exact_match:  # Skip exact match as we already tried it
                                 continue
+                            # Prioritize results that don't contain common sub-topic keywords
+                            if any(keyword in result.lower() for keyword in ['discography', 'album', 'song', 'tour', 'live', 'compilation']):
+                                other_results.append(result)
+                            else:
+                                prioritized_results.append(result)
+                        
+                        # Try prioritized results first, then others
+                        for result in prioritized_results + other_results:
                             try:
                                 page = wikipedia.page(result, auto_suggest=True)
                                 print(f"Success with search result '{result}': {page.title}")
