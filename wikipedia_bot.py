@@ -310,23 +310,38 @@ Examples:
                             print(f"Exact match failed '{exact_match}': {exact_err}")
                             page = None
                     
-                    # If exact match failed or not found, try other results but prioritize main topics
+                    # If exact match failed or not found, try other results with smart prioritization
                     if not page:
-                        # Sort results to prioritize main topics over sub-topics
-                        prioritized_results = []
-                        other_results = []
+                        # Smart prioritization: look for the main entity (band/person) vs sub-topics
+                        main_entity_results = []
+                        sub_topic_results = []
                         
                         for result in search_results:
                             if result == exact_match:  # Skip exact match as we already tried it
                                 continue
-                            # Prioritize results that don't contain common sub-topic keywords
-                            if any(keyword in result.lower() for keyword in ['discography', 'album', 'song', 'tour', 'live', 'compilation']):
-                                other_results.append(result)
+                            
+                            result_lower = result.lower()
+                            title_lower = title.lower()
+                            
+                            # Check if this looks like the main entity we're searching for
+                            # Priority 1: Results that contain the search term but are likely the main page
+                            if (title_lower in result_lower and 
+                                not any(keyword in result_lower for keyword in 
+                                       ['discography', 'album', 'song', 'tour', 'live', 'compilation', 
+                                        'filmography', 'bibliography', 'awards', 'controversy'])):
+                                # Further check: avoid results that are clearly sub-topics
+                                if not any(separator in result for separator in [' – ', ' - ', ': ', ' (album)', ' (song)', ' (film)']):
+                                    main_entity_results.append(result)
+                                else:
+                                    sub_topic_results.append(result)
                             else:
-                                prioritized_results.append(result)
+                                sub_topic_results.append(result)
                         
-                        # Try prioritized results first, then others
-                        for result in prioritized_results + other_results:
+                        print(f"Main entity candidates: {main_entity_results}")
+                        print(f"Sub-topic candidates: {sub_topic_results}")
+                        
+                        # Try main entity results first, then sub-topics
+                        for result in main_entity_results + sub_topic_results:
                             try:
                                 page = wikipedia.page(result, auto_suggest=True)
                                 print(f"Success with search result '{result}': {page.title}")
