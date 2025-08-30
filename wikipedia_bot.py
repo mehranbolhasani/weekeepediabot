@@ -1,4 +1,5 @@
 import logging
+import os
 import wikipedia
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
@@ -9,8 +10,11 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Your bot token from BotFather
-BOT_TOKEN = "8309264806:AAHZrguhnEwoRe4eC_enTkvcLlJ6-6REbYM"
+# Get bot token from environment variable
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is required. Please set it in Railway.")
 
 # Set Wikipedia language (optional)
 wikipedia.set_lang("en")

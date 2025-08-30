@@ -1,2 +1,2 @@
 python-telegram-bot==20.7
-wikipedia-api==0.6.0
+wikipedia==1.4.0
