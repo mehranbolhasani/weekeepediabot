@@ -163,6 +163,43 @@ class WikipediaBot:
         try:
             print(f"🔍 Attempting to load page: '{title}'")
             
+            # Manual overrides for problematic searches
+            manual_overrides = {
+                'pink floyd': 'Pink Floyd',
+                'linkin park': 'Linkin Park', 
+                'the beatles': 'The Beatles',
+                'led zeppelin': 'Led Zeppelin',
+                'queen': 'Queen (band)',
+                'metallica': 'Metallica',
+                'nirvana': 'Nirvana (band)',
+                'radiohead': 'Radiohead',
+                'coldplay': 'Coldplay',
+                'u2': 'U2',
+                'red hot chili peppers': 'Red Hot Chili Peppers',
+                'green day': 'Green Day',
+                'foo fighters': 'Foo Fighters',
+                'pearl jam': 'Pearl Jam',
+                'ac/dc': 'AC/DC',
+                'guns n\' roses': 'Guns N\' Roses',
+                'black sabbath': 'Black Sabbath',
+                'iron maiden': 'Iron Maiden',
+                'deep purple': 'Deep Purple',
+                'the rolling stones': 'The Rolling Stones'
+            }
+            
+            # Check for manual override
+            title_lower = title.lower().strip()
+            if title_lower in manual_overrides:
+                override_title = manual_overrides[title_lower]
+                print(f"🎯 Manual override: '{title}' -> '{override_title}'")
+                try:
+                    page = wikipedia.page(override_title, auto_suggest=False)
+                    print(f"✅ Override success: {page.title}")
+                    await self.send_article_summary(message, page)
+                    return
+                except Exception as e:
+                    print(f"❌ Override failed: {e}")
+            
             # First try direct Wikipedia API (bypasses library issues)
             direct_result = await self.get_wikipedia_page_direct(title)
             if direct_result:
