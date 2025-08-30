@@ -290,18 +290,38 @@ Examples:
                 # If direct access fails, try search-based approach
                 print(f"Direct access failed, trying search-based approach")
                 try:
-                    # Get search results and try each one
+                    # Get search results and prioritize exact matches
                     search_results = wikipedia.search(title, results=5)
                     print(f"Search found: {search_results}")
                     
+                    # First, try to find an exact match (case-insensitive)
+                    exact_match = None
                     for result in search_results:
-                        try:
-                            page = wikipedia.page(result, auto_suggest=True)
-                            print(f"Success with search result '{result}': {page.title}")
+                        if result.lower() == title.lower():
+                            exact_match = result
                             break
-                        except Exception as search_err:
-                            print(f"Failed with '{result}': {search_err}")
-                            continue
+                    
+                    # If we found an exact match, try it first
+                    if exact_match:
+                        try:
+                            page = wikipedia.page(exact_match, auto_suggest=True)
+                            print(f"Success with exact match '{exact_match}': {page.title}")
+                        except Exception as exact_err:
+                            print(f"Exact match failed '{exact_match}': {exact_err}")
+                            page = None
+                    
+                    # If exact match failed or not found, try other results
+                    if not page:
+                        for result in search_results:
+                            if result == exact_match:  # Skip exact match as we already tried it
+                                continue
+                            try:
+                                page = wikipedia.page(result, auto_suggest=True)
+                                print(f"Success with search result '{result}': {page.title}")
+                                break
+                            except Exception as search_err:
+                                print(f"Failed with '{result}': {search_err}")
+                                continue
                 except wikipedia.exceptions.PageError:
                     # Try with title case variations
                     print(f"Auto_suggest failed, trying title variations")
